@@ -1,38 +1,48 @@
 #!/bin/bash
 
-# Create output directory
 mkdir -p pokemon_data
-
-# Error log
 error_log="errors.log"
 > "$error_log"
 
-# Pokémon list
 pokemon_list=(bulbasaur ivysaur venusaur charmander charmeleon)
-
-# Base URL
 base_url="https://pokeapi.co/api/v2/pokemon"
 
-# Function to fetch data
+# Timeout in seconds
+timeout=10
+
+# Function to fetch data with timeout
 fetch_pokemon() {
-    pokemon=$1
+    local pokemon=$1
     echo "Fetching data for $pokemon..."
 
-    response=$(curl -s --fail "$base_url/$pokemon")
-    if [ $? -eq 0 ] && [ -n "$response" ]; then
-        echo "$response" > "pokemon_data/${pokemon}.json"
-        echo "Saved data to pokemon_data/${pokemon}.json ✅"
-    else
+    # Start curl in the background and capture its PID
+    curl -s --fail "$base_url/$pokemon" > "pokemon_data/${pokemon}.json" &
+    pid=$!
+
+    # Wait for the process with a timeout
+    ( sleep $timeout && kill -9 $pid 2>/dev/null && echo "Timeout fetching $pokemon ❌" >> "$error_log" ) &
+    watchdog=$!
+
+    wait $pid 2>/dev/null
+    curl_status=$?
+
+    # Clean up watchdog
+    kill -9 $watchdog 2>/dev/null
+
+    if [ $curl_status -ne 0 ]; then
         echo "Failed to fetch data for $pokemon ❌" | tee -a "$error_log"
+        rm -f "pokemon_data/${pokemon}.json"
+    else
+        echo "Saved data to pokemon_data/${pokemon}.json ✅"
     fi
 }
 
-# Launch background fetch jobs
+# Launch all fetches in background
 for pokemon in "${pokemon_list[@]}"; do
     fetch_pokemon "$pokemon" &
 done
 
-# Wait for all background jobs to finish
+# Wait for all background processes
 wait
 
 echo "✅ All fetch operations complete."
