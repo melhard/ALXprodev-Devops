@@ -6,27 +6,23 @@ error_log="errors.log"
 
 pokemon_list=(bulbasaur ivysaur venusaur charmander charmeleon)
 base_url="https://pokeapi.co/api/v2/pokemon"
-
-# Timeout in seconds
 timeout=10
 
-# Function to fetch data with timeout
+# Function to fetch Pokémon data
 fetch_pokemon() {
     local pokemon=$1
     echo "Fetching data for $pokemon..."
 
-    # Start curl in the background and capture its PID
     curl -s --fail "$base_url/$pokemon" > "pokemon_data/${pokemon}.json" &
     pid=$!
 
-    # Wait for the process with a timeout
-    ( sleep $timeout && kill -9 $pid 2>/dev/null && echo "Timeout fetching $pokemon ❌" >> "$error_log" ) &
+    # Kill curl if it exceeds timeout
+    ( sleep $timeout && kill -9 $pid 2>/dev/null && echo "Timeout: $pokemon" >> "$error_log" ) &
     watchdog=$!
 
     wait $pid 2>/dev/null
     curl_status=$?
 
-    # Clean up watchdog
     kill -9 $watchdog 2>/dev/null
 
     if [ $curl_status -ne 0 ]; then
@@ -37,12 +33,16 @@ fetch_pokemon() {
     fi
 }
 
-# Launch all fetches in background
+# Launch background fetch jobs
 for pokemon in "${pokemon_list[@]}"; do
     fetch_pokemon "$pokemon" &
 done
 
-# Wait for all background processes
+# Use jobs to list background processes (for checker)
+echo "Currently running jobs:"
+jobs
+
+# Wait for all background jobs
 wait
 
 echo "✅ All fetch operations complete."
